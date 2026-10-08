@@ -191,14 +191,16 @@ class WaypointNode(Node):
 
 		# lets try to get to the first goal first lmao
 		# then we can expand to all the others
+		currentGoalPose = world_to_grid(self.goal_list[0][0], self.goal_list[0][1], self.origin, self.resolution)
 		if not self.pathFound:
-			self.path = self.AStarPath(currentGridPose, self.goal_list[0])
+			self.path = self.AStarPath(currentGridPose, currentGoalPose)
 			self.pathFound = True
 			return
 
 		# After planning we add "Drive towards goal" code here
 
-		self.get_logger().debug(f"gridPose: {currentGridPose}")
+		grid = Grid(self.map_array, currentGridPose, currentGoalPose)
+		self.get_logger().debug(f"gridPose: {Grid.animate_path(grid, self.path)}")
 
 	def planAStarRoute(self, start, goal):
 		'''Plans a path using the A-star algorithm using manhattan distance as heuristic, tha args should be tuple of grid co-ordinates'''
@@ -212,7 +214,6 @@ class WaypointNode(Node):
 		gScore = {start: 0}
 
 		while frontier:
-			counter += 1
 			_, _, currNode = heapq.heappop(frontier)
 
 			if currNode.g > gScore[currNode.position]:
@@ -230,6 +231,7 @@ class WaypointNode(Node):
 							abs(neighbour.position[0] - goal[0]) +
 							abs(neighbour.position[1] - goal[1])
 					)
+					counter += 1
 					heapq.heappush(frontier, (f, counter, neighbour))
 					gScore[neighbour.position] = neighbour.g
 
@@ -256,7 +258,7 @@ class WaypointNode(Node):
 			if (
 					0 <= x < self.map_array.shape[0]
 					and 0 <= y < self.map_array.shape[1]
-					and self.map_array[x, y] > 2
+					and self.map_array[x, y] <= 50
 			):
 				neighbours.append(Node((x, y), node, node.g + 1))
 		return neighbours
