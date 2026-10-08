@@ -191,16 +191,68 @@ class WaypointNode(Node):
 
 		# lets try to get to the first goal first lmao
 		# then we can expand to all the others
+		if not self.goal_list:
+			self.move_2D(0, 0, 0)
+			self.get_logger().debug(f"Goal Reached!!!")
+			return
+
 		currentGoalPose = world_to_grid(self.goal_list[0][0], self.goal_list[0][1], self.origin, self.resolution)
 		if not self.pathFound:
 			self.path = self.AStarPath(currentGridPose, currentGoalPose)
+
+			if self.path is None:
+				self.move_2D(0, 0, 0)
+				return
+
 			self.pathFound = True
 			return
 
 		# After planning we add "Drive towards goal" code here
+		# P controller
 
-		grid = Grid(self.map_array, currentGridPose, currentGoalPose)
-		self.get_logger().debug(f"gridPose: {Grid.animate_path(grid, self.path)}")
+		if not self.path:
+			self.move_2D(0, 0, 0)
+			self.get_logger().debug(f"Waypoint reached!!")
+			self.get_logger().debug(f"Moving on to the next goal!")
+			self.goal_list.pop(0)
+			self.pathFound = False
+			return
+
+		nextTarget = grid_to_world(self.path[0][0], self.path[0][1], self.origin, self.resolution)
+
+		dx = nextTarget[0] - self.pose[0]
+		dy = nextTarget[1] - self.pose[1]
+
+		distanceToGoal = np.hypot(dx, dy)
+		# range of arctan2 is (-pi, pi)
+		headingError = np.arctan2(dy, dx) - np.deg2rad(self.pose[2])
+		# Normalisation to find the shortest rotation needed
+		headingError += np.pi
+		headingError %= (2 * np.pi)
+		headingError -= np.pi
+
+		KpDist = 1.8
+		KpAngle = 3
+
+		linear_velocity = np.clip(KpDist * distanceToGoal, -0.2, 0.2)
+
+		angular_velocity = KpAngle * headingError
+
+		if distanceToGoal < 0.072:
+			self.get_logger().debug(f"Node Reached!!")
+			self.path.pop(0)
+
+		self.move_2D(linear_velocity, 0, angular_velocity)
+
+
+		# grid = Grid(self.map_array, currentGridPose, currentGoalPose)
+		self.get_logger().debug(f"distance: {distanceToGoal}")
+		self.get_logger().debug(f"linear_velocity: {linear_velocity}")
+		self.get_logger().debug(f"angular_velocity: {angular_velocity}")
+		self.get_logger().debug(f"rotationError: {headingError}")
+		self.get_logger().debug(f"currentPose: {self.pose}")
+		self.get_logger().debug(f"currentgoal: {nextTarget}")
+
 
 	def planAStarRoute(self, start, goal):
 		'''Plans a path using the A-star algorithm using manhattan distance as heuristic, tha args should be tuple of grid co-ordinates'''
@@ -244,6 +296,8 @@ class WaypointNode(Node):
 			x = x.parent
 			y.append(x.position)
 		y.reverse()
+		# Remove Start Node
+		y.pop(0)
 		return y
 
 	def getNeighbours(self, node):
